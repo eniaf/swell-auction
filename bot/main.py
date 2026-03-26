@@ -350,18 +350,21 @@ class SwellArbBot:
         """Verify the executor's on-chain router/auction match what we expect."""
         if not self.executor:
             return
+        try:
+            on_chain_router = self.executor.functions.odosRouter().call()
+            on_chain_auction = self.executor.functions.auctionContract().call()
 
-        on_chain_router = self.executor.functions.odosRouter().call()
-        on_chain_auction = self.executor.functions.auctionContract().call()
+            log.info(f"Executor on-chain router:  {on_chain_router}")
+            log.info(f"Executor on-chain auction: {on_chain_auction}")
 
-        log.info(f"Executor on-chain router:  {on_chain_router}")
-        log.info(f"Executor on-chain auction: {on_chain_auction}")
-
-        if on_chain_auction.lower() != AUCTION_ADDRESS.lower():
-            log.warning(
-                f"⚠ Auction mismatch! Contract has {on_chain_auction}, "
-                f"bot expects {AUCTION_ADDRESS}. Call setAuctionContract() or update .env"
-            )
+            if on_chain_auction.lower() != AUCTION_ADDRESS.lower():
+                log.warning(
+                    f"Auction mismatch! Contract has {on_chain_auction}, "
+                    f"bot expects {AUCTION_ADDRESS}. Call setAuctionContract() or update .env"
+                )
+        except Exception as e:
+            log.warning(f"Executor validation failed — is EXECUTOR_ADDRESS a deployed contract? ({e})")
+            log.warning("Continuing in monitoring-only mode")
 
     # --- Auction state ---
 
