@@ -75,6 +75,7 @@ Deploy `contracts/SwellFeeFlowExecutor.sol` using Foundry, Hardhat, or Remix.
 **Foundry example:**
 ```bash
 forge create contracts/SwellFeeFlowExecutor.sol:SwellFeeFlowExecutor \
+  --constructor-args 0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05 0xf17b581496bc2669ce0931FAcAA1ADe35029E85D \
   --rpc-url $RPC_URL \
   --private-key $PRIVATE_KEY \
   --etherscan-api-key $ETHERSCAN_KEY \
@@ -114,7 +115,7 @@ python bot/main.py
 | rswETH | `0xFAe103DC9cf190eD75350761e95403b7b8aFa6c0` |
 | Fee Flow Auction | `0xf17b581496bc2669ce0931FAcAA1ADe35029E85D` |
 | WETH | `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` |
-| Odos Router V2 | returned dynamically by Odos API |
+| Odos Router V3 | `0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05` |
 
 ## Important Notes
 
@@ -232,6 +233,7 @@ python bot/tests/preflight_mainnet.py
 ```
 1. Deploy executor to mainnet:
    forge create contracts/SwellFeeFlowExecutor.sol:SwellFeeFlowExecutor \
+     --constructor-args 0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05 0xf17b581496bc2669ce0931FAcAA1ADe35029E85D \
      --rpc-url $RPC_URL --private-key $PRIVATE_KEY --verify
 
 2. Approve WETH:

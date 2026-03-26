@@ -290,11 +290,13 @@ def run_simulation():
             abi_element_identifier="execute",
             args=[
                 weth_for_swell,
-                bytes.fromhex(a1.calldata[2:]),
-                bytes.fromhex(auction_calldata[2:]),
-                bytes.fromhex(a2.calldata[2:]) if a2 else b"",
-                bytes.fromhex(a3.calldata[2:]) if a3 else b"",
-                bytes.fromhex(a4.calldata[2:]) if a4 else b"",
+                (
+                    bytes.fromhex(a1.calldata[2:]),
+                    bytes.fromhex(auction_calldata[2:]),
+                    bytes.fromhex(a2.calldata[2:]) if a2 else b"",
+                    bytes.fromhex(a3.calldata[2:]) if a3 else b"",
+                    bytes.fromhex(a4.calldata[2:]) if a4 else b"",
+                ),
                 min_profit_wei,
             ],
         )

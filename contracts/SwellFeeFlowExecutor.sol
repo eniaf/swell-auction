@@ -97,31 +97,32 @@ contract SwellFeeFlowExecutor is Ownable, ReentrancyGuard {
     // Core execution
     // =====================================================================
 
+    /// @dev Packs the five calldata blobs to avoid stack-too-deep in execute().
+    struct SwapCalldata {
+        bytes wethToSwell;    // Odos: WETH → SWELL
+        bytes auctionBuy;     // Fee Flow auction buy()
+        bytes swethToWeth;    // Odos: swETH → WETH
+        bytes rswethToWeth;   // Odos: rswETH → WETH
+        bytes swellToWeth;    // Odos: leftover SWELL → WETH (empty if none)
+    }
+
     /**
      * @notice Execute the full atomic arbitrage.
-     * @param wethAmount            Amount of WETH to pull from owner as input
-     * @param odosSwapWethToSwell   Odos calldata: WETH → SWELL (over-bought with buffer)
-     * @param auctionCalldata       Encoded buy() call for the Fee Flow auction
-     * @param odosSwapSwethToWeth   Odos calldata: swETH → WETH
-     * @param odosSwapRswethToWeth  Odos calldata: rswETH → WETH
-     * @param odosSwapSwellToWeth   Odos calldata: leftover SWELL → WETH (empty bytes if none expected)
-     * @param minProfit             Minimum net WETH profit — reverts if not met
+     * @param wethAmount  Amount of WETH to pull from owner as input
+     * @param swaps       Packed calldata for all five swap/auction steps
+     * @param minProfit   Minimum net WETH profit — reverts if not met
      */
     function execute(
         uint256 wethAmount,
-        bytes calldata odosSwapWethToSwell,
-        bytes calldata auctionCalldata,
-        bytes calldata odosSwapSwethToWeth,
-        bytes calldata odosSwapRswethToWeth,
-        bytes calldata odosSwapSwellToWeth,
+        SwapCalldata calldata swaps,
         uint256 minProfit
     ) external onlyOwner nonReentrant {
         require(wethAmount > 0, "Zero WETH input");
 
         // Validate auction calldata calls buy() and nothing else
-        require(auctionCalldata.length >= 4, "Auction calldata too short");
+        require(swaps.auctionBuy.length >= 4, "Auction calldata too short");
         require(
-            bytes4(auctionCalldata[:4]) == AUCTION_BUY_SELECTOR,
+            bytes4(swaps.auctionBuy[:4]) == AUCTION_BUY_SELECTOR,
             "Invalid auction selector"
         );
 
@@ -141,7 +142,7 @@ contract SwellFeeFlowExecutor is Ownable, ReentrancyGuard {
         // Step 2: Swap WETH → SWELL via Odos (over-bought with buffer)
         // =================================================================
         _approveExact(WETH, _router, wethAmount);
-        _doCall(_router, odosSwapWethToSwell, "WETH->SWELL failed");
+        _doCall(_router, swaps.wethToSwell, "WETH->SWELL failed");
         _revoke(WETH, _router);
 
         uint256 swellBalance = IERC20(SWELL).balanceOf(address(this));
@@ -151,7 +152,7 @@ contract SwellFeeFlowExecutor is Ownable, ReentrancyGuard {
         // Step 3: Approve SWELL to auction, call buy(), revoke
         // =================================================================
         _approveExact(SWELL, _auction, swellBalance);
-        _doCall(_auction, auctionCalldata, "Auction buy() failed");
+        _doCall(_auction, swaps.auctionBuy, "Auction buy() failed");
         _revoke(SWELL, _auction);
 
         // =================================================================
@@ -160,7 +161,7 @@ contract SwellFeeFlowExecutor is Ownable, ReentrancyGuard {
         uint256 swethBalance = IERC20(SWETH).balanceOf(address(this));
         if (swethBalance > 0) {
             _approveExact(SWETH, _router, swethBalance);
-            _doCall(_router, odosSwapSwethToWeth, "swETH->WETH failed");
+            _doCall(_router, swaps.swethToWeth, "swETH->WETH failed");
             _revoke(SWETH, _router);
         }
 
@@ -170,7 +171,7 @@ contract SwellFeeFlowExecutor is Ownable, ReentrancyGuard {
         uint256 rswethBalance = IERC20(RSWETH).balanceOf(address(this));
         if (rswethBalance > 0) {
             _approveExact(RSWETH, _router, rswethBalance);
-            _doCall(_router, odosSwapRswethToWeth, "rswETH->WETH failed");
+            _doCall(_router, swaps.rswethToWeth, "rswETH->WETH failed");
             _revoke(RSWETH, _router);
         }
 
@@ -178,9 +179,9 @@ contract SwellFeeFlowExecutor is Ownable, ReentrancyGuard {
         // Step 6: Sell leftover SWELL → WETH (from the over-buy buffer)
         // =================================================================
         uint256 swellLeftover = IERC20(SWELL).balanceOf(address(this));
-        if (swellLeftover > 0 && odosSwapSwellToWeth.length > 0) {
+        if (swellLeftover > 0 && swaps.swellToWeth.length > 0) {
             _approveExact(SWELL, _router, swellLeftover);
-            _doCall(_router, odosSwapSwellToWeth, "SWELL leftover swap failed");
+            _doCall(_router, swaps.swellToWeth, "SWELL leftover swap failed");
             _revoke(SWELL, _router);
         }
 

@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(forge remappings:*)",
+      "Bash(forge build:*)",
+      "Bash(cp bot/tests/Level1_Unit.t.sol test/Level1_Unit.t.sol)",
+      "Bash(cp bot/tests/Level2_Fork.t.sol test/Level2_Fork.t.sol)",
+      "Bash(mv bot.py bot/bot.py)",
+      "Bash(mv bot.log bot/bot.log)",
+      "Bash(rm -rf bot/contracts)",
+      "Bash(forge test:*)",
+      "Bash(sed -i 's|import \"\"../src/SwellFeeFlowExecutor.sol\"\";|import \"\"../src/SwellFeeFlowExecutor.sol\"\";\\\\nimport \"\"@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol\"\";|' D:/Projects/swell-auction/test/Level2_Fork.t.sol)",
+      "Bash(sed -i 's|IERC20\\(WETH\\).decimals\\(\\)|IERC20Metadata\\(WETH\\).decimals\\(\\)|g; s|IERC20\\(SWELL\\).decimals\\(\\)|IERC20Metadata\\(SWELL\\).decimals\\(\\)|g; s|IERC20\\(SWETH\\).decimals\\(\\)|IERC20Metadata\\(SWETH\\).decimals\\(\\)|g; s|IERC20\\(RSWETH\\).decimals\\(\\)|IERC20Metadata\\(RSWETH\\).decimals\\(\\)|g' D:/Projects/swell-auction/test/Level2_Fork.t.sol)",
+      "Bash(mv src:*)",
+      "Bash(mv bot/bot.py bot/main.py)",
+      "Bash(sed -n '44,60p' D:/Projects/swell-auction/bot/tests/test_e2e_simulation.py)",
+      "Bash(sed -n '33,50p' D:/Projects/swell-auction/bot/tests/preflight_mainnet.py)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(pytest bot/tests/test_integration.py -v -k \"not TestAnvil\")",
+      "Bash(python -c \"import web3; print\\(web3.__version__\\)\")",
+      "Bash(python -c \"from web3 import Web3; help\\(Web3\\(\\).eth.contract\\(address=''''0x0000000000000000000000000000000000000001'''', abi=[]\\).encode_abi\\)\")",
+      "Bash(python bot/tests/test_e2e_simulation.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python bot/tests/test_e2e_simulation.py)",
+      "Bash(git -C D:/Projects/swell-auction remote -v)",
+      "Bash(wc:*)",
+      "WebFetch(domain:api.odos.xyz)"
+    ]
+  }
+}

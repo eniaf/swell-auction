@@ -75,7 +75,7 @@ TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 DEPOSIT_TOKENS = [SWETH, RSWETH]   # watch inbound transfers of these tokens to the auction
 
 # --- Odos API ---
-ODOS_QUOTE_URL    = "https://api.odos.xyz/sor/quote/v2"
+ODOS_QUOTE_URL    = "https://api.odos.xyz/sor/quote/v3"
 ODOS_ASSEMBLE_URL = "https://api.odos.xyz/sor/assemble"
 ODOS_API_KEY = os.getenv("ODOS_API_KEY", "")
 
@@ -160,16 +160,22 @@ ERC20_ABI = json.loads("""[
     {"inputs":[],"name":"symbol","outputs":[{"name":"","type":"string"}],"stateMutability":"view","type":"function"}
 ]""")
 
-# Updated executor ABI — odosRouterAddr removed (now stored on-chain)
+# Executor ABI — execute() uses a SwapCalldata struct to avoid stack-too-deep
 EXECUTOR_ABI = json.loads("""[
     {
         "inputs": [
             {"name": "wethAmount", "type": "uint256"},
-            {"name": "odosSwapWethToSwell", "type": "bytes"},
-            {"name": "auctionCalldata", "type": "bytes"},
-            {"name": "odosSwapSwethToWeth", "type": "bytes"},
-            {"name": "odosSwapRswethToWeth", "type": "bytes"},
-            {"name": "odosSwapSwellToWeth", "type": "bytes"},
+            {
+                "name": "swaps",
+                "type": "tuple",
+                "components": [
+                    {"name": "wethToSwell",  "type": "bytes"},
+                    {"name": "auctionBuy",   "type": "bytes"},
+                    {"name": "swethToWeth",  "type": "bytes"},
+                    {"name": "rswethToWeth", "type": "bytes"},
+                    {"name": "swellToWeth",  "type": "bytes"}
+                ]
+            },
             {"name": "minProfit", "type": "uint256"}
         ],
         "name": "execute",
@@ -645,16 +651,18 @@ class SwellArbBot:
         min_profit_wei = Web3.to_wei(MIN_PROFIT_ETH, "ether") + int(estimated_gas_cost_wei * GAS_SAFETY_MULT)
         log.info(f"On-chain minProfit (gas-aware): {Web3.from_wei(min_profit_wei, 'ether'):.6f} ETH")
 
-        # --- Build executor calldata (no odosRouterAddr — it's on-chain now) ---
+        # --- Build executor calldata ---
         executor_calldata = self.executor.encodeABI(
             fn_name="execute",
             args=[
                 weth_amount,
-                bytes.fromhex(a1.calldata[2:]),                        # WETH->SWELL
-                bytes.fromhex(auction_calldata[2:]),                    # auction buy()
-                bytes.fromhex(a2.calldata[2:]) if a2 else b"",         # swETH->WETH
-                bytes.fromhex(a3.calldata[2:]) if a3 else b"",         # rswETH->WETH
-                bytes.fromhex(a4.calldata[2:]) if a4 else b"",         # leftover SWELL->WETH
+                (
+                    bytes.fromhex(a1.calldata[2:]),                        # wethToSwell
+                    bytes.fromhex(auction_calldata[2:]),                    # auctionBuy
+                    bytes.fromhex(a2.calldata[2:]) if a2 else b"",         # swethToWeth
+                    bytes.fromhex(a3.calldata[2:]) if a3 else b"",         # rswethToWeth
+                    bytes.fromhex(a4.calldata[2:]) if a4 else b"",         # swellToWeth
+                ),
                 min_profit_wei,
             ],
         )
@@ -691,11 +699,13 @@ class SwellArbBot:
                     fn_name="execute",
                     args=[
                         weth_amount,
-                        bytes.fromhex(a1.calldata[2:]),
-                        bytes.fromhex(auction_calldata[2:]),
-                        bytes.fromhex(a2.calldata[2:]) if a2 else b"",
-                        bytes.fromhex(a3.calldata[2:]) if a3 else b"",
-                        bytes.fromhex(a4.calldata[2:]) if a4 else b"",
+                        (
+                            bytes.fromhex(a1.calldata[2:]),
+                            bytes.fromhex(auction_calldata[2:]),
+                            bytes.fromhex(a2.calldata[2:]) if a2 else b"",
+                            bytes.fromhex(a3.calldata[2:]) if a3 else b"",
+                            bytes.fromhex(a4.calldata[2:]) if a4 else b"",
+                        ),
                         min_profit_refined,
                     ],
                 )
