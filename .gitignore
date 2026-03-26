@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+bot.log
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Foundry
+out/
+cache/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
