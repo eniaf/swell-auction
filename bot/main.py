@@ -10,7 +10,7 @@ through Flashbots Protect for MEV protection.
 Architecture:
   1. Monitor auction state (epoch, current price, assets available)
   2. When an epoch is active, continuously price the full arb loop:
-     WETH → SWELL (Odos) → Auction bid → swETH+rswETH → WETH (Odos)
+     WETH -> SWELL (Odos) -> Auction bid -> swETH+rswETH -> WETH (Odos)
   3. If profit > threshold, build + submit via Flashbots Protect
   4. Contract enforces atomic execution & min profit check
 
@@ -82,7 +82,6 @@ ODOS_API_KEY = os.getenv("ODOS_API_KEY", "")
 # --- Bot params ---
 MIN_PROFIT_ETH        = float(os.getenv("MIN_PROFIT_ETH", "0.06"))
 GAS_SAFETY_MULT       = float(os.getenv("GAS_SAFETY_MULT", "1.5"))  # Multiply estimated gas cost for minProfit
-POLL_INTERVAL         = int(os.getenv("POLL_INTERVAL", "30"))
 DEPOSIT_POLL_INTERVAL = int(os.getenv("DEPOSIT_POLL_INTERVAL", "12"))   # seconds between log polls (~1 block)
 HEARTBEAT_INTERVAL    = int(os.getenv("HEARTBEAT_INTERVAL",    "60"))   # fallback main-loop cadence
 SLIPPAGE_PCT          = float(os.getenv("SLIPPAGE_PCT", "0.2"))
@@ -414,10 +413,10 @@ class SwellArbBot:
         Estimate full arb profitability with SWELL over-buy buffer.
 
         Quote chain (respecting 1 RPS free tier):
-          1. WETH → SWELL (probe + actual)
-          2. swETH → WETH
-          3. rswETH → WETH
-          4. leftover SWELL → WETH
+          1. WETH -> SWELL (probe + actual)
+          2. swETH -> WETH
+          3. rswETH -> WETH
+          4. leftover SWELL -> WETH
         """
         if state.is_bought:
             log.info(f"Epoch {state.epoch_id} already bought, skipping")
@@ -434,7 +433,7 @@ class SwellArbBot:
         log.info(f"SWELL needed for auction:  {Web3.from_wei(swell_needed, 'ether'):,.2f}")
         log.info(f"SWELL target (w/ {SWELL_BUFFER_PCT}% buf): {Web3.from_wei(swell_target, 'ether'):,.2f}")
 
-        # --- Quote 1: probe to get WETH→SWELL rate ---
+        # --- Quote 1: probe to get WETH->SWELL rate ---
         probe_weth = Web3.to_wei(0.5, "ether")
         probe_quote = odos_get_quote(WETH, probe_weth, SWELL, EXECUTOR_ADDRESS)
         if not probe_quote or probe_quote.out_amount == 0:
@@ -453,7 +452,7 @@ class SwellArbBot:
         # Actual quote with calculated WETH amount
         quote_swell = odos_get_quote(WETH, weth_for_swell, SWELL, EXECUTOR_ADDRESS)
         if not quote_swell:
-            log.warning("Odos WETH→SWELL quote failed")
+            log.warning("Odos WETH->SWELL quote failed")
             return None
 
         weth_cost = quote_swell.in_amount
@@ -472,7 +471,7 @@ class SwellArbBot:
 
         time.sleep(1.1)
 
-        # --- Quote 2: swETH → WETH ---
+        # --- Quote 2: swETH -> WETH ---
         sweth_amount = 0
         rsweth_amount = 0
         for i, asset in enumerate(state.assets):
@@ -487,26 +486,26 @@ class SwellArbBot:
             quote_sweth = odos_get_quote(SWETH, sweth_amount, WETH, EXECUTOR_ADDRESS)
             if quote_sweth:
                 weth_from_sweth = quote_sweth.out_amount
-                log.info(f"swETH → WETH:  {Web3.from_wei(weth_from_sweth, 'ether'):.6f}")
+                log.info(f"swETH -> WETH:  {Web3.from_wei(weth_from_sweth, 'ether'):.6f}")
             time.sleep(1.1)
 
-        # --- Quote 3: rswETH → WETH ---
+        # --- Quote 3: rswETH -> WETH ---
         weth_from_rsweth = 0
         if rsweth_amount > 0:
             quote_rsweth = odos_get_quote(RSWETH, rsweth_amount, WETH, EXECUTOR_ADDRESS)
             if quote_rsweth:
                 weth_from_rsweth = quote_rsweth.out_amount
-                log.info(f"rswETH → WETH: {Web3.from_wei(weth_from_rsweth, 'ether'):.6f}")
+                log.info(f"rswETH -> WETH: {Web3.from_wei(weth_from_rsweth, 'ether'):.6f}")
             time.sleep(1.1)
 
-        # --- Quote 4: leftover SWELL → WETH ---
+        # --- Quote 4: leftover SWELL -> WETH ---
         estimated_leftover = swell_out - swell_needed
         weth_from_leftover = 0
         if estimated_leftover > 0:
             quote_leftover = odos_get_quote(SWELL, estimated_leftover, WETH, EXECUTOR_ADDRESS)
             if quote_leftover:
                 weth_from_leftover = quote_leftover.out_amount
-                log.info(f"SWELL leftover → WETH: {Web3.from_wei(weth_from_leftover, 'ether'):.6f}")
+                log.info(f"SWELL leftover -> WETH: {Web3.from_wei(weth_from_leftover, 'ether'):.6f}")
 
         # --- Calculate total profit ---
         total_weth_out = weth_from_sweth + weth_from_rsweth + weth_from_leftover
@@ -560,15 +559,15 @@ class SwellArbBot:
 
         # --- Get fresh Odos quotes & assemble ---
 
-        # 1) WETH → SWELL (with buffer)
-        log.info("Assembling WETH → SWELL...")
+        # 1) WETH -> SWELL (with buffer)
+        log.info("Assembling WETH -> SWELL...")
         q1 = odos_get_quote(WETH, weth_amount, SWELL, executor_addr)
         if not q1:
-            log.error("Failed to quote WETH → SWELL")
+            log.error("Failed to quote WETH -> SWELL")
             return None
         a1 = odos_assemble(q1.path_id, executor_addr)
         if not a1:
-            log.error("Failed to assemble WETH → SWELL")
+            log.error("Failed to assemble WETH -> SWELL")
             return None
 
         # Verify the assembled router matches the on-chain whitelist
@@ -583,8 +582,8 @@ class SwellArbBot:
 
         time.sleep(1.1)
 
-        # 2) swETH → WETH
-        log.info("Assembling swETH → WETH...")
+        # 2) swETH -> WETH
+        log.info("Assembling swETH -> WETH...")
         sweth_amount = arb_info["sweth_out"]
         a2 = None
         if sweth_amount > 0:
@@ -593,8 +592,8 @@ class SwellArbBot:
                 a2 = odos_assemble(q2.path_id, executor_addr)
             time.sleep(1.1)
 
-        # 3) rswETH → WETH
-        log.info("Assembling rswETH → WETH...")
+        # 3) rswETH -> WETH
+        log.info("Assembling rswETH -> WETH...")
         rsweth_amount = arb_info["rsweth_out"]
         a3 = None
         if rsweth_amount > 0:
@@ -603,8 +602,8 @@ class SwellArbBot:
                 a3 = odos_assemble(q3.path_id, executor_addr)
             time.sleep(1.1)
 
-        # 4) Leftover SWELL → WETH
-        log.info("Assembling leftover SWELL → WETH...")
+        # 4) Leftover SWELL -> WETH
+        log.info("Assembling leftover SWELL -> WETH...")
         estimated_leftover = arb_info.get("estimated_leftover", 0)
         a4 = None
         if estimated_leftover > 0:
@@ -648,11 +647,11 @@ class SwellArbBot:
             fn_name="execute",
             args=[
                 weth_amount,
-                bytes.fromhex(a1.calldata[2:]),                        # WETH→SWELL
+                bytes.fromhex(a1.calldata[2:]),                        # WETH->SWELL
                 bytes.fromhex(auction_calldata[2:]),                    # auction buy()
-                bytes.fromhex(a2.calldata[2:]) if a2 else b"",         # swETH→WETH
-                bytes.fromhex(a3.calldata[2:]) if a3 else b"",         # rswETH→WETH
-                bytes.fromhex(a4.calldata[2:]) if a4 else b"",         # leftover SWELL→WETH
+                bytes.fromhex(a2.calldata[2:]) if a2 else b"",         # swETH->WETH
+                bytes.fromhex(a3.calldata[2:]) if a3 else b"",         # rswETH->WETH
+                bytes.fromhex(a4.calldata[2:]) if a4 else b"",         # leftover SWELL->WETH
                 min_profit_wei,
             ],
         )
@@ -764,7 +763,7 @@ class SwellArbBot:
                 for entry in logs:
                     token = entry["address"]
                     symbol = "swETH" if token.lower() == SWETH.lower() else "rswETH"
-                    log.info(f"Deposit detected: {symbol} → auction (block {entry['blockNumber']})")
+                    log.info(f"Deposit detected: {symbol} -> auction (block {entry['blockNumber']})")
             return len(logs) > 0
         except Exception as e:
             log.warning(f"eth_getLogs error: {e}")
@@ -881,27 +880,27 @@ def simulate_from_example():
 
     executor = EXECUTOR_ADDRESS if EXECUTOR_ADDRESS != "0x0000000000000000000000000000000000000000" else "0x8EB54fBb1CD02a982b0DE63a0182D56A45342E22"
 
-    log.info("Getting Odos quote: WETH → SWELL...")
+    log.info("Getting Odos quote: WETH -> SWELL...")
     q1 = odos_get_quote(WETH, int(0.7 * 1e18), SWELL, executor)
     if q1:
-        log.info(f"  0.7 WETH → {q1.out_amount / 1e18:,.2f} SWELL")
+        log.info(f"  0.7 WETH -> {q1.out_amount / 1e18:,.2f} SWELL")
         swell_per_weth = q1.out_amount / (0.7 * 1e18)
         weth_needed = swell_amount / (swell_per_weth * 1e18)
         log.info(f"  Estimated WETH needed: {weth_needed:.6f}")
 
     time.sleep(1.1)
 
-    log.info("Getting Odos quote: swETH → WETH...")
+    log.info("Getting Odos quote: swETH -> WETH...")
     q2 = odos_get_quote(SWETH, sweth_received, WETH, executor)
     if q2:
-        log.info(f"  {sweth_received / 1e18:.6f} swETH → {q2.out_amount / 1e18:.6f} WETH")
+        log.info(f"  {sweth_received / 1e18:.6f} swETH -> {q2.out_amount / 1e18:.6f} WETH")
 
     time.sleep(1.1)
 
-    log.info("Getting Odos quote: rswETH → WETH...")
+    log.info("Getting Odos quote: rswETH -> WETH...")
     q3 = odos_get_quote(RSWETH, rsweth_received, WETH, executor)
     if q3:
-        log.info(f"  {rsweth_received / 1e18:.6f} rswETH → {q3.out_amount / 1e18:.6f} WETH")
+        log.info(f"  {rsweth_received / 1e18:.6f} rswETH -> {q3.out_amount / 1e18:.6f} WETH")
 
     if q1 and q2 and q3:
         total_out = (q2.out_amount + q3.out_amount) / 1e18
