@@ -5,15 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/swell-auction
-EnvironmentFile=/home/pi/swell-auction/.env
-ExecStart=/home/pi/swell-auction/venv/bin/python bot/main.py
+User=fenyvesi
+WorkingDirectory=/home/fenyvesi/Projects/swell-auction
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/fenyvesi/Projects/swell-auction/venv/bin/python /home/fenyvesi/Projects/swell-auction/bot/main.py
 Restart=always
-RestartSec=15
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=swell-arb
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
