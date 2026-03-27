@@ -110,11 +110,7 @@ contract UnitTest is Test {
         vm.expectRevert();
         executor.execute(
             1 ether,
-            "",
-            "",
-            "",
-            "",
-            "",
+            SwellFeeFlowExecutor.SwapCalldata("", "", "", "", ""),
             0
         );
     }
@@ -142,7 +138,7 @@ contract UnitTest is Test {
 
     function test_revertOnZeroWethAmount() public {
         vm.expectRevert("Zero WETH input");
-        executor.execute(0, "", "", "", "", "", 0);
+        executor.execute(0, SwellFeeFlowExecutor.SwapCalldata("", "", "", "", ""), 0);
     }
 
     // -----------------------------------------------------------------

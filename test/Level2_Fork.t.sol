@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {SwellFeeFlowExecutor} from "../contracts/SwellFeeFlowExecutor.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 // ============================================================================
@@ -118,11 +119,13 @@ contract ForkTest is Test {
         vm.expectRevert("No SWELL received");
         executor.execute(
             1 ether,
-            abi.encodeWithSignature("swap()"),                      // dummy swap calldata
-            abi.encodeWithSelector(executor.AUCTION_BUY_SELECTOR()), // valid selector (won't reach)
-            "",
-            "",
-            "",
+            SwellFeeFlowExecutor.SwapCalldata({
+                wethToSwell:  abi.encodeWithSignature("swap()"),
+                auctionBuy:   abi.encodeWithSelector(executor.AUCTION_BUY_SELECTOR()),
+                swethToWeth:  "",
+                rswethToWeth: "",
+                swellToWeth:  ""
+            }),
             0.06 ether
         );
     }

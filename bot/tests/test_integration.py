@@ -213,11 +213,13 @@ class TestABIEncoding:
             abi_element_identifier="execute",
             args=[
                 Web3.to_wei(1, "ether"),                        # wethAmount
-                b"\x01\x02\x03",                                # odosSwapWethToSwell
-                b"\x04\x05\x06",                                # auctionCalldata
-                b"\x07\x08\x09",                                # odosSwapSwethToWeth
-                b"\x0a\x0b\x0c",                                # odosSwapRswethToWeth
-                b"\x0d\x0e\x0f",                                # odosSwapSwellToWeth
+                (                                               # SwapCalldata tuple
+                    b"\x01\x02\x03",                            # wethToSwell
+                    b"\x04\x05\x06",                            # auctionBuy
+                    b"\x07\x08\x09",                            # swethToWeth
+                    b"\x0a\x0b\x0c",                            # rswethToWeth
+                    b"\x0d\x0e\x0f",                            # swellToWeth
+                ),
                 Web3.to_wei(0.06, "ether"),                     # minProfit
             ],
         )

@@ -46,10 +46,12 @@ load_dotenv()
 # Configuration
 # ============================================================================
 
+import sys
+_stream_handler = logging.StreamHandler(stream=open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler("bot.log")],
+    handlers=[_stream_handler, logging.FileHandler("bot.log", encoding="utf-8")],
 )
 log = logging.getLogger(__name__)
 
@@ -68,7 +70,7 @@ RSWETH = Web3.to_checksum_address("0xFAe103DC9cf190eD75350761e95403b7b8aFa6c0")
 
 # --- Contracts ---
 AUCTION_ADDRESS  = Web3.to_checksum_address("0xf17b581496bc2669ce0931FAcAA1ADe35029E85D")
-EXECUTOR_ADDRESS = Web3.to_checksum_address(os.getenv("EXECUTOR_ADDRESS", "0x0000000000000000000000000000000000000000"))
+EXECUTOR_ADDRESS = Web3.to_checksum_address(os.getenv("EXECUTOR_ADDRESS", "0xDd35d3591eA8657FbBF87C16cFb7935BDDDbC272"))
 
 # --- Deposit monitoring ---
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -108,7 +110,32 @@ AUCTION_ABI = json.loads("""[
     },
     {
         "inputs": [],
-        "name": "currentEpoch",
+        "name": "getSlot0",
+        "outputs": [
+            {
+                "components": [
+                    {"name": "locked",    "type": "uint8"},
+                    {"name": "epochId",   "type": "uint16"},
+                    {"name": "initPrice", "type": "uint192"},
+                    {"name": "startTime", "type": "uint40"}
+                ],
+                "name": "",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getPrice",
+        "outputs": [{"name": "price", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "epochPeriod",
         "outputs": [{"name": "", "type": "uint256"}],
         "stateMutability": "view",
         "type": "function"
@@ -117,36 +144,6 @@ AUCTION_ABI = json.loads("""[
         "inputs": [],
         "name": "paymentToken",
         "outputs": [{"name": "", "type": "address"}],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{"name": "epochId", "type": "uint256"}],
-        "name": "getEpochInfo",
-        "outputs": [
-            {"name": "startTime", "type": "uint256"},
-            {"name": "endTime", "type": "uint256"},
-            {"name": "startPrice", "type": "uint256"},
-            {"name": "endPrice", "type": "uint256"},
-            {"name": "isBought", "type": "bool"}
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{"name": "epochId", "type": "uint256"}],
-        "name": "getCurrentPrice",
-        "outputs": [{"name": "", "type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{"name": "epochId", "type": "uint256"}],
-        "name": "getAvailableAssets",
-        "outputs": [
-            {"name": "assets", "type": "address[]"},
-            {"name": "amounts", "type": "uint256[]"}
-        ],
         "stateMutability": "view",
         "type": "function"
     }
@@ -293,13 +290,15 @@ def odos_get_quote(
         return None
 
 
-def odos_assemble(path_id: str, user_addr: str) -> Optional[OdosAssembly]:
+def odos_assemble(path_id: str, user_addr: str, deadline: Optional[int] = None) -> Optional[OdosAssembly]:
     """Assemble transaction calldata from an Odos quote."""
     body = {
         "userAddr": user_addr,
         "pathId": path_id,
         "simulate": False,
     }
+    if deadline is not None:
+        body["deadline"] = deadline
     try:
         resp = requests.post(ODOS_ASSEMBLE_URL, json=body, headers=odos_headers(), timeout=15)
         if resp.status_code != 200:
@@ -375,41 +374,62 @@ class SwellArbBot:
     # --- Auction state ---
 
     def get_auction_state(self) -> Optional[AuctionState]:
-        """Read current epoch info from the auction contract."""
+        """Read current epoch info from the auction contract (Euler FeeFlow model).
+
+        The auction uses a fixed-price-per-epoch model: initPrice is constant for
+        the full epochPeriod, then a new epoch begins with an adjusted price.
+        """
         try:
-            epoch_id = self.auction.functions.currentEpoch().call()
-            log.info(f"Current epoch: {epoch_id}")
+            slot0 = self.auction.functions.getSlot0().call()
+            locked     = slot0[0]   # uint8:  1 = unlocked, 2 = reentrancy locked
+            epoch_id   = slot0[1]   # uint16: current epoch number
+            init_price = slot0[2]   # uint192: fixed price for this epoch (in SWELL)
+            start_time = slot0[3]   # uint40: epoch start unix timestamp
 
-            try:
-                info = self.auction.functions.getEpochInfo(epoch_id).call()
-                start_time, end_time, start_price, end_price, is_bought = info
-            except Exception:
-                log.warning("getEpochInfo not available, trying alternative...")
-                start_time = 0
-                end_time = 0
-                is_bought = False
+            epoch_period = self.auction.functions.epochPeriod().call()
+            end_time = start_time + epoch_period
+            now = int(time.time())
 
-            try:
-                current_price = self.auction.functions.getCurrentPrice(epoch_id).call()
-            except Exception:
-                current_price = 0
-                log.warning("getCurrentPrice not available")
+            # Check if epoch has expired
+            if now >= end_time:
+                log.info(f"Epoch {epoch_id} expired {(now - end_time) // 3600:.1f}h ago, "
+                         f"waiting for next epoch to be initiated")
+                return AuctionState(
+                    epoch_id=epoch_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    is_bought=True,
+                    current_price=0,
+                    assets=[SWETH, RSWETH],
+                    amounts=[0, 0],
+                )
 
-            try:
-                assets, amounts = self.auction.functions.getAvailableAssets(epoch_id).call()
-            except Exception:
-                assets = [SWETH, RSWETH]
-                amounts = [0, 0]
-                log.warning("getAvailableAssets not available")
+            # Current decayed price (Dutch auction decay from initPrice over epochPeriod)
+            current_price = self.auction.functions.getPrice().call()
+
+            # Get available asset balances held by the auction contract
+            sweth_token  = self.w3.eth.contract(address=SWETH,  abi=ERC20_ABI)
+            rsweth_token = self.w3.eth.contract(address=RSWETH, abi=ERC20_ABI)
+            sweth_bal  = sweth_token.functions.balanceOf(AUCTION_ADDRESS).call()
+            rsweth_bal = rsweth_token.functions.balanceOf(AUCTION_ADDRESS).call()
+
+            time_remaining = end_time - now
+            log.info(
+                f"Epoch {epoch_id}: current={Web3.from_wei(current_price, 'ether'):,.0f} SWELL "
+                f"(init={Web3.from_wei(init_price, 'ether'):,.0f}), "
+                f"expires in {time_remaining // 3600:.0f}h {(time_remaining % 3600) // 60:.0f}m, "
+                f"swETH={Web3.from_wei(sweth_bal, 'ether'):.4f}, "
+                f"rswETH={Web3.from_wei(rsweth_bal, 'ether'):.4f}"
+            )
 
             return AuctionState(
                 epoch_id=epoch_id,
                 start_time=start_time,
                 end_time=end_time,
-                is_bought=is_bought,
+                is_bought=False,
                 current_price=current_price,
-                assets=assets,
-                amounts=amounts,
+                assets=[SWETH, RSWETH],
+                amounts=[sweth_bal, rsweth_bal],
             )
         except Exception as e:
             log.error(f"Failed to read auction state: {e}")
@@ -476,7 +496,7 @@ class SwellArbBot:
                         f"Buffer insufficient, need more WETH")
             return None
 
-        log.info(f"Worst-case SWELL after slippage: {Web3.from_wei(worst_case_swell, 'ether'):,.2f} ✓")
+        log.info(f"Worst-case SWELL after slippage: {Web3.from_wei(worst_case_swell, 'ether'):,.2f} [OK]")
 
         time.sleep(1.1)
 
@@ -529,7 +549,7 @@ class SwellArbBot:
         log.info(f"WETH out total:       {Web3.from_wei(total_weth_out, 'ether'):.6f}")
         log.info(f"Profit:               {'+' if profit > 0 else '-'}{profit_eth:.6f} ETH")
         log.info(f"Min required:         {MIN_PROFIT_ETH} ETH")
-        log.info(f"Profitable:           {'YES ✓' if profit > 0 and float(profit_eth) >= MIN_PROFIT_ETH else 'NO ✗'}")
+        log.info(f"Profitable:           {'YES' if profit > 0 and float(profit_eth) >= MIN_PROFIT_ETH else 'NO'}")
         log.info("=" * 60)
 
         if profit > 0 and float(profit_eth) >= MIN_PROFIT_ETH:
@@ -745,7 +765,7 @@ class SwellArbBot:
         result = fb_response.json()
         if "result" in result:
             tx_hash = result["result"]
-            log.info(f"✓ Transaction submitted via Flashbots: {tx_hash}")
+            log.info(f"[OK] Transaction submitted via Flashbots: {tx_hash}")
             log.info(f"  Note: tx won't appear on Etherscan until mined")
             log.info(f"  Check: https://protect.flashbots.net/tx/{tx_hash}")
             return tx_hash

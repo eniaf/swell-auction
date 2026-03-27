@@ -53,7 +53,7 @@ contract SwellFeeFlowExecutor is Ownable, ReentrancyGuard {
 
     // --- Expected auction buy() selector ---
     // buy(address[],address,uint256,uint256,uint256)
-    bytes4 public constant AUCTION_BUY_SELECTOR = 0x3d7aa8f5;
+    bytes4 public constant AUCTION_BUY_SELECTOR = 0x99d5ce49;
 
     // --- Events ---
     event ArbitrageExecuted(

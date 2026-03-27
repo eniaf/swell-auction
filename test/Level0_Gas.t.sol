@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test, console} from "forge-std/Test.sol";
 import {SwellFeeFlowExecutor} from "../contracts/SwellFeeFlowExecutor.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // ============================================================================
 // Level 0: Gas Estimation
@@ -158,7 +159,7 @@ contract GasTest is Test {
         );
 
         uint256 gasBefore = gasleft();
-        executor.execute(WETH_IN, leg1, auctionData, leg2, leg3, leg4, 0);
+        executor.execute(WETH_IN, SwellFeeFlowExecutor.SwapCalldata(leg1, auctionData, leg2, leg3, leg4), 0);
         uint256 gasUsed = gasBefore - gasleft();
 
         console.log("--- Gas report: full execute() (4 swap legs) ---");
@@ -189,7 +190,7 @@ contract GasTest is Test {
         );
 
         uint256 gasBefore = gasleft();
-        executor.execute(WETH_IN, leg1, auctionData, leg2, leg3, "", 0);
+        executor.execute(WETH_IN, SwellFeeFlowExecutor.SwapCalldata(leg1, auctionData, leg2, leg3, ""), 0);
         uint256 gasUsed = gasBefore - gasleft();
 
         console.log("--- Gas report: execute() (3 swap legs, no leftover SWELL) ---");

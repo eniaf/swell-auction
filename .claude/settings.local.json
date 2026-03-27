@@ -23,7 +23,15 @@
       "Bash(PYTHONIOENCODING=utf-8 python bot/tests/test_e2e_simulation.py)",
       "Bash(git -C D:/Projects/swell-auction remote -v)",
       "Bash(wc:*)",
-      "WebFetch(domain:api.odos.xyz)"
+      "WebFetch(domain:api.odos.xyz)",
+      "Bash(source .env)",
+      "Bash(cast code:*)",
+      "Bash(cast call:*)",
+      "Bash(source D:/Projects/swell-auction/.env)",
+      "Bash(venv/Scripts/python.exe -c \":*)",
+      "Bash(pytest bot/tests/test_integration.py::TestABIEncoding::test_executor_abi_encoding -v --tb=short)",
+      "Bash(python bot/tests/preflight_mainnet.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python bot/tests/preflight_mainnet.py)"
     ]
   }
 }

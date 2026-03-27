@@ -26,6 +26,13 @@ import sys
 import json
 import requests
 
+# Force UTF-8 output on Windows so emoji don't crash on cp1252 terminals
+if hasattr(sys.stdout, "fileno"):
+    try:
+        sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)
+    except Exception:
+        pass
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from web3 import Web3
@@ -173,11 +180,22 @@ def run_preflight():
 
     try:
         auction = w3.eth.contract(address=AUCTION_ADDRESS, abi=AUCTION_ABI)
-        epoch = auction.functions.currentEpoch().call()
-        check("currentEpoch() callable", True, f"epoch={epoch}")
+        slot0 = auction.functions.getSlot0().call()
+        epoch_id   = slot0[1]
+        init_price = slot0[2]
+        start_time = slot0[3]
+        check("getSlot0() callable", True,
+              f"epoch_id={epoch_id}, init_price={Web3.from_wei(init_price, 'ether'):,.0f} SWELL")
     except Exception as e:
-        check("currentEpoch() callable", False, str(e)[:80])
+        check("getSlot0() callable", False, str(e)[:80])
         print(f"    → You may need to update the auction ABI")
+
+    try:
+        current_price = auction.functions.getPrice().call()
+        check("getPrice() callable", True,
+              f"{Web3.from_wei(current_price, 'ether'):,.0f} SWELL")
+    except Exception as e:
+        check("getPrice() callable", False, str(e)[:80])
 
     # --- 5. Flashbots ---
     print("\n5. Flashbots Protect")
