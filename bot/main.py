@@ -645,7 +645,7 @@ class SwellArbBot:
         deadline = int(time.time()) + 600
         max_payment = arb_info["swell_target"]
 
-        auction_calldata = self.auction.encodeABI(
+        auction_calldata = self.auction.encode_abi(
             fn_name="buy",
             args=[
                 [SWETH, RSWETH],
@@ -672,7 +672,7 @@ class SwellArbBot:
         log.info(f"On-chain minProfit (gas-aware): {Web3.from_wei(min_profit_wei, 'ether'):.6f} ETH")
 
         # --- Build executor calldata ---
-        executor_calldata = self.executor.encodeABI(
+        executor_calldata = self.executor.encode_abi(
             fn_name="execute",
             args=[
                 weth_amount,
@@ -715,7 +715,7 @@ class SwellArbBot:
             if min_profit_refined > min_profit_wei:
                 log.info(f"Refining minProfit upward: {Web3.from_wei(min_profit_refined, 'ether'):.6f} ETH")
                 # Rebuild calldata with refined minProfit
-                executor_calldata = self.executor.encodeABI(
+                executor_calldata = self.executor.encode_abi(
                     fn_name="execute",
                     args=[
                         weth_amount,
@@ -756,7 +756,7 @@ class SwellArbBot:
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "eth_sendRawTransaction",
-                "params": [signed.raw_transaction.hex()],
+                "params": ["0x" + signed.raw_transaction.hex()],
             },
             headers={"Content-Type": "application/json"},
             timeout=30,
