@@ -47,7 +47,7 @@ load_dotenv()
 # ============================================================================
 
 import sys
-_stream_handler = logging.StreamHandler(stream=open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
+_stream_handler = logging.StreamHandler(stream=open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1, closefd=False))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -332,7 +332,7 @@ class SwellArbBot:
             log.info(f"Bot wallet: {self.account.address}")
         else:
             self.account = None
-            log.warning("No PRIVATE_KEY set — running in read-only mode")
+            log.warning("No PRIVATE_KEY set - running in read-only mode")
 
         self.auction = self.w3.eth.contract(
             address=AUCTION_ADDRESS, abi=AUCTION_ABI
@@ -344,10 +344,11 @@ class SwellArbBot:
             )
         else:
             self.executor = None
-            log.warning("No EXECUTOR_ADDRESS set — cannot submit txs")
+            log.warning("No EXECUTOR_ADDRESS set - cannot submit txs")
 
         self._exec_lock = threading.Lock()
         self._stop_event = threading.Event()
+        self._wakeup = threading.Event()
         self._last_checked_block: int = 0
         self._heartbeat_interval: int = HEARTBEAT_SLOW_INTERVAL  # start slow; speeds up once profit turns positive
 
@@ -370,7 +371,7 @@ class SwellArbBot:
                     f"bot expects {AUCTION_ADDRESS}. Call setAuctionContract() or update .env"
                 )
         except Exception as e:
-            log.warning(f"Executor validation failed — is EXECUTOR_ADDRESS a deployed contract? ({e})")
+            log.warning(f"Executor validation failed - is EXECUTOR_ADDRESS a deployed contract? ({e})")
             log.warning("Continuing in monitoring-only mode")
 
     # --- Auction state ---
@@ -560,6 +561,8 @@ class SwellArbBot:
             log.info(f"Heartbeat interval: {self._heartbeat_interval}s -> {new_interval}s "
                      f"({'profit positive, polling fast' if profit > 0 else 'profit negative, polling slow'})")
             self._heartbeat_interval = new_interval
+            if new_interval < HEARTBEAT_SLOW_INTERVAL:
+                self._wakeup.set()  # interrupt the current slow sleep so the new interval takes effect immediately
 
         if profit > 0 and float(profit_eth) >= MIN_PROFIT_ETH:
             return {
@@ -746,7 +749,7 @@ class SwellArbBot:
 
         if DRY_RUN:
             log.info("=" * 60)
-            log.info("DRY RUN — Transaction would be:")
+            log.info("DRY RUN - Transaction would be:")
             log.info(f"  To:       {tx['to']}")
             log.info(f"  Gas:      {tx['gas']}")
             log.info(f"  MaxFee:   {Web3.from_wei(tx['maxFeePerGas'], 'gwei'):.2f} gwei")
@@ -890,13 +893,18 @@ class SwellArbBot:
 
         while True:
             try:
-                self._stop_event.wait(timeout=self._heartbeat_interval)
+                self._wakeup.wait(timeout=self._heartbeat_interval)
                 if self._stop_event.is_set():
                     break
+                if self._wakeup.is_set():
+                    # Interval was shortened by a deposit-triggered check; restart the wait
+                    self._wakeup.clear()
+                    continue
                 self._try_execute("heartbeat")
             except KeyboardInterrupt:
                 log.info("Shutting down...")
                 self._stop_event.set()
+                self._wakeup.set()
                 watcher_thread.join(timeout=5)
                 break
             except Exception as e:
