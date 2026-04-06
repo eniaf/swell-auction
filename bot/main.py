@@ -84,8 +84,9 @@ ODOS_API_KEY = os.getenv("ODOS_API_KEY", "")
 # --- Bot params ---
 MIN_PROFIT_ETH        = float(os.getenv("MIN_PROFIT_ETH", "0.06"))
 GAS_SAFETY_MULT       = float(os.getenv("GAS_SAFETY_MULT", "1.5"))  # Multiply estimated gas cost for minProfit
-DEPOSIT_POLL_INTERVAL = int(os.getenv("DEPOSIT_POLL_INTERVAL", "12"))   # seconds between log polls (~1 block)
-HEARTBEAT_INTERVAL    = int(os.getenv("HEARTBEAT_INTERVAL",    "60"))   # fallback main-loop cadence
+DEPOSIT_POLL_INTERVAL    = int(os.getenv("DEPOSIT_POLL_INTERVAL",    "12"))    # seconds between log polls (~1 block)
+HEARTBEAT_INTERVAL      = int(os.getenv("HEARTBEAT_INTERVAL",      "60"))    # fast heartbeat when profit > 0
+HEARTBEAT_SLOW_INTERVAL = int(os.getenv("HEARTBEAT_SLOW_INTERVAL", "3600"))  # slow heartbeat when profit <= 0
 SLIPPAGE_PCT          = float(os.getenv("SLIPPAGE_PCT", "0.2"))
 SWELL_BUFFER_PCT  = float(os.getenv("SWELL_BUFFER_PCT", "1.0"))
 DRY_RUN           = os.getenv("DRY_RUN", "true").lower() == "true"
@@ -348,6 +349,7 @@ class SwellArbBot:
         self._exec_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._last_checked_block: int = 0
+        self._heartbeat_interval: int = HEARTBEAT_SLOW_INTERVAL  # start slow; speeds up once profit turns positive
 
     # --- Startup validation ---
 
@@ -551,6 +553,13 @@ class SwellArbBot:
         log.info(f"Min required:         {MIN_PROFIT_ETH} ETH")
         log.info(f"Profitable:           {'YES' if profit > 0 and float(profit_eth) >= MIN_PROFIT_ETH else 'NO'}")
         log.info("=" * 60)
+
+        # Adaptive heartbeat: speed up once profit turns positive, slow down when negative
+        new_interval = HEARTBEAT_INTERVAL if profit > 0 else HEARTBEAT_SLOW_INTERVAL
+        if new_interval != self._heartbeat_interval:
+            log.info(f"Heartbeat interval: {self._heartbeat_interval}s -> {new_interval}s "
+                     f"({'profit positive, polling fast' if profit > 0 else 'profit negative, polling slow'})")
+            self._heartbeat_interval = new_interval
 
         if profit > 0 and float(profit_eth) >= MIN_PROFIT_ETH:
             return {
@@ -858,7 +867,7 @@ class SwellArbBot:
         log.info(f"  Gas safety:   {GAS_SAFETY_MULT}x")
         log.info(f"  Dry run:      {DRY_RUN}")
         log.info(f"  Deposit poll: {DEPOSIT_POLL_INTERVAL}s (~1 block)")
-        log.info(f"  Heartbeat:    {HEARTBEAT_INTERVAL}s (fallback)")
+        log.info(f"  Heartbeat:    {HEARTBEAT_INTERVAL}s (fast) / {HEARTBEAT_SLOW_INTERVAL}s (slow)")
         log.info("=" * 60)
 
         # Validate on-chain config at startup
@@ -881,7 +890,7 @@ class SwellArbBot:
 
         while True:
             try:
-                self._stop_event.wait(timeout=HEARTBEAT_INTERVAL)
+                self._stop_event.wait(timeout=self._heartbeat_interval)
                 if self._stop_event.is_set():
                     break
                 self._try_execute("heartbeat")
